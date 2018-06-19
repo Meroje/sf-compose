@@ -1,0 +1,100 @@
+version: "3.6"
+services:
+  rabbitmq:
+    image: rabbitmq:management-alpine
+    ports:
+      - 5672:5672
+      - 15672:15672
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq:nocopy
+    environment:
+      RABBITMQ_DEFAULT_VHOST: ${AMQP_DEFAULT_VHOST}
+
+  redis:
+    image: redis:alpine
+    ports:
+      - 6379:6379
+    volumes:
+      - redisdata:/data:nocopy
+
+  fpm:
+    build:
+      context: docker/php
+      args:
+        - PHP_SAPI=fpm
+    links:
+      - rabbitmq
+      - redis
+    volumes:
+      - ./composer.json:/var/www/html/composer.json:cached
+      - ./.env:/var/www/html/.env:cached
+      - ./public:/var/www/html/public:cached
+      - ./config:/var/www/html/config:cached
+      - ./src:/var/www/html/src:cached
+      - ./bin:/var/www/html/bin:cached
+      - composervendor:/var/www/html/vendor:nocopy
+      - phpdata:/var/www/html/var:nocopy
+
+  php:
+    build:
+      context: docker/php
+      args:
+        - PHP_SAPI=cli
+    restart: "no"
+    links:
+      - rabbitmq
+      - redis
+    volumes:
+      - ./composer.json:/var/www/html/composer.json:cached
+      - ./composer.lock:/var/www/html/composer.lock:cached
+      - ./symfony.lock:/var/www/html/symfony.lock:cached
+      - ./phpunit.xml.dist:/var/www/html/phpunit.xml.dist:cached
+      - ./.php_cs.dist:/var/www/html/.php_cs.dist:cached
+      - ./.env:/var/www/html/.env:cached
+      - ./.env.dist:/var/www/html/.env.dist:cached
+      - ./public:/var/www/html/public:cached
+      - ./config:/var/www/html/config:cached
+      - ./src:/var/www/html/src:cached
+      - ./tests:/var/www/html/tests:cached
+      - ./bin:/var/www/html/bin:cached
+      - composervendor:/var/www/html/vendor:nocopy
+      - composercache:/root/.composer/cache:nocopy
+      - composerglobalvendor:/root/.composer/vendor:nocopy
+      - phpdata:/var/www/html/var:nocopy
+
+  composer:
+    image: composer
+    restart: "no"
+    command: install --ignore-platform-reqs
+    volumes:
+      - ./composer.json:/app/composer.json:cached
+      - ./composer.lock:/app/composer.lock:cached
+      - ./symfony.lock:/app/symfony.lock:cached
+      - ./.env:/app/.env:cached
+      - ./config:/app/config:cached
+      - ./src:/app/src:cached
+      - ./bin:/app/bin:cached
+      - composervendor:/app/vendor:nocopy
+      - composercache:/tmp/cache:nocopy
+      - composerglobalvendor:/tmp/vendor:nocopy
+      - phpdata:/app/var:nocopy
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - 8880:80
+    links:
+      - fpm:php
+    volumes:
+      - ./docker/nginx/nginx.vh.default.conf:/etc/nginx/conf.d/default.conf
+      - ./public:/var/www/html/public:cached
+
+volumes:
+  composervendor:
+  composercache:
+    external: true
+  composerglobalvendor:
+    external: true
+  phpdata:
+  redisdata:
+  rabbitdata:
